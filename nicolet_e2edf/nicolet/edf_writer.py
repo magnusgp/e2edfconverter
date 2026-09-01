@@ -496,6 +496,19 @@ def write_edf(
             annotations, start, n_records, record_duration
         )
     
+    # Decide up front whether the fast uniform path applies: every channel must
+    # share one samples-per-record AND one array length (a ragged tail would
+    # break the stacked record slice).
+    uniform_spr = False
+    uniform_samples_per_record = 0
+    uniform_n_samples = 0
+    if n_channels > 0 and len(set(samples_per_record[:n_channels])) == 1:
+        lengths = {len(ch_arrays[i]) for i in range(n_channels)}
+        if len(lengths) == 1:
+            uniform_spr = True
+            uniform_samples_per_record = samples_per_record[0]
+            uniform_n_samples = lengths.pop()
+
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -507,28 +520,61 @@ def write_edf(
         # EDF format: for each record, write all channels sequentially.
         # Each channel uses its own samples-per-record (native rate support).
         for record_idx in range(n_records):
-            # Write each signal's data for this record
-            for ch_idx in range(n_channels):
-                spr = samples_per_record[ch_idx]
-                ch_start = record_idx * spr
-                ch_end = min(ch_start + spr, len(ch_arrays[ch_idx]))
-                channel_data = ch_arrays[ch_idx][ch_start:ch_end]
-                actual_samples = len(channel_data)
+            # Two write paths, same bytes out:
+            #  * uniform path — every channel shares one samples-per-record, so
+            #    the whole record quantises in a single NumPy op (upstream v0.4
+            #    speedup). This is the routine-EEG case.
+            #  * native-rate path — channels run at different rates (PSG), so
+            #    each is quantised and written with its own samples-per-record.
+            if uniform_spr:
+                start_sample = record_idx * uniform_samples_per_record
+                end_sample = min(start_sample + uniform_samples_per_record, uniform_n_samples)
+                actual_samples = max(0, end_sample - start_sample)
 
-                # Scale to digital values
-                scaled = (
-                    (channel_data - physical_min[ch_idx]) * scales[ch_idx] + digital_min[ch_idx]
+                # Stack from ch_arrays, never from data_uV: ch_arrays is the
+                # sanitised view (non-finite samples already replaced with 0.0)
+                # and is what physical_min/physical_max were derived from.
+                record_data = np.stack(
+                    [ch_arrays[i][start_sample:end_sample] for i in range(n_channels)],
+                    axis=1,
                 )
-                signal = np.clip(np.rint(scaled), -32768, 32767).astype("<i2")
+                scaled = (
+                    (record_data - physical_min[:n_channels]) * scales[:n_channels]
+                    + digital_min[:n_channels]
+                )
+                signals = np.clip(np.rint(scaled), -32768, 32767).astype("<i2")
+                if actual_samples < uniform_samples_per_record:
+                    channel_major = np.zeros(
+                        (n_channels, uniform_samples_per_record), dtype="<i2"
+                    )
+                    if actual_samples:
+                        channel_major[:, :actual_samples] = signals.T
+                else:
+                    channel_major = signals.T
+                handle.write(channel_major.tobytes())
+            else:
+                # Write each signal's data for this record at its own rate
+                for ch_idx in range(n_channels):
+                    spr = samples_per_record[ch_idx]
+                    ch_start = record_idx * spr
+                    ch_end = min(ch_start + spr, len(ch_arrays[ch_idx]))
+                    channel_data = ch_arrays[ch_idx][ch_start:ch_end]
+                    actual_samples = len(channel_data)
 
-                # Pad with zeros if this is a partial record (last record)
-                if actual_samples < spr:
-                    padded = np.zeros(spr, dtype="<i2")
-                    padded[:actual_samples] = signal
-                    signal = padded
+                    # Scale to digital values
+                    scaled = (
+                        (channel_data - physical_min[ch_idx]) * scales[ch_idx] + digital_min[ch_idx]
+                    )
+                    signal = np.clip(np.rint(scaled), -32768, 32767).astype("<i2")
 
-                handle.write(signal.tobytes())
-            
+                    # Pad with zeros if this is a partial record (last record)
+                    if actual_samples < spr:
+                        padded = np.zeros(spr, dtype="<i2")
+                        padded[:actual_samples] = signal
+                        signal = padded
+
+                    handle.write(signal.tobytes())
+
             # Write annotation signal for this record if included
             if include_annotations and events_per_record is not None:
                 # Build TAL bytes for this record

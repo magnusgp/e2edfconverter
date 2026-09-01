@@ -4,12 +4,62 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nicolet-e2edf"
-version = "0.2.9"
-description = "Convert Nicolet/Nervus .e/.eeg EEG recordings into EDF files."
+version = "0.4.2"
+description = "Open-source Python converter for Natus/Nicolet/Nervus .e EEG recordings to EDF+."
 readme = "README.md"
 license = {file = "LICENSE"}
+keywords = [
+    "EEG",
+    "electroencephalography",
+    "EDF",
+    "EDF+",
+    "EDF Plus",
+    "Natus",
+    "Nicolet",
+    "Nervus",
+    "Nicolet .e",
+    "Nicolet .eeg",
+    "Natus Nicolet",
+    "clinical EEG",
+    "EEG data",
+    "EEG annotations",
+    "EDF annotations",
+    "EEG converter",
+    "EDF converter",
+    "neurophysiology",
+    "clinical neurophysiology",
+    "electrophysiology",
+    "neuroscience",
+    "brain monitoring",
+    "biomedical signals",
+    "biosignal processing",
+    "biosignal conversion",
+    "signal processing",
+    "medical data",
+    "data conversion",
+    "file format conversion",
+    "vendor-neutral",
+]
 classifiers = [
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)"
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: File Formats",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
 ]
 authors = [
     {name = "Nicolet e2edf contributors"}
@@ -18,6 +68,12 @@ requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.23"
 ]
+
+[project.urls]
+Homepage = "https://github.com/haukurtg/e2edfconverter"
+Repository = "https://github.com/haukurtg/e2edfconverter"
+Issues = "https://github.com/haukurtg/e2edfconverter/issues"
+Changelog = "https://github.com/haukurtg/e2edfconverter/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

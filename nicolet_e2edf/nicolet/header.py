@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 import logging
-import struct
 import re
-from io import BytesIO
+import struct
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
@@ -122,6 +122,11 @@ _UINT16 = struct.Struct("<H")
 _UINT32 = struct.Struct("<I")
 _UINT64 = struct.Struct("<Q")
 _DOUBLE = struct.Struct("<d")
+_UNKNOWN_MONTAGE_TITLE_RE = re.compile(r"(\d{1,3}\s+KANALER)\b")
+_UNKNOWN_MONTAGE_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9 _-]{2,31}")
+_UNKNOWN_MONTAGE_CHANNEL_RE = re.compile(r"[A-Za-z][A-Za-z0-9+\-_/ ]{0,23}")
+_UNKNOWN_MONTAGE_OBVIOUS_LABEL_RE = re.compile(r"[A-Z]{1,4}\d{0,3}[A-Z]?")
+_UNKNOWN_MONTAGE_LEADING_INT_RE = re.compile(r"(\d+)")
 
 # Guardrails for reverse-engineered hidden montage catalogs found in UNKNOWN
 # static packet families. Some recordings carry very large UNKNOWN blobs that
@@ -141,6 +146,14 @@ def _read_exact(handle: BinaryIO, size: int) -> bytes:
     if len(data) != size:
         raise EOFError(f"Unexpected end of file while reading {size} bytes")
     return data
+
+
+def _stream_size(handle: BinaryIO) -> int:
+    position = handle.tell()
+    try:
+        return int(handle.seek(0, 2))
+    finally:
+        handle.seek(position, 0)
 
 
 def _read_u16(handle: BinaryIO) -> int:
@@ -223,26 +236,41 @@ def _read_qi_index(handle: BinaryIO, nr_static_packets: int) -> dict[str, object
 def _read_qi_index2(handle: BinaryIO, qi_index: dict[str, object]) -> list[dict[str, object]]:
     handle.seek(188_664, 0)
     lqi = int(qi_index.get("LQi", 0) or 0)
+    record_struct = struct.Struct("<HHIIIIIIIQQI")
+    if lqi < 0:
+        raise ValueError(f"QIIndex2 record count cannot be negative: {lqi}")
+    available_bytes = max(0, _stream_size(handle) - handle.tell())
+    required_bytes = lqi * record_struct.size
+    if required_bytes > available_bytes:
+        raise EOFError(
+            f"Unexpected end of file: {lqi} QIIndex2 records cannot fit "
+            "within the remaining stream"
+        )
     entries: list[dict[str, object]] = []
-    for _ in range(lqi):
-        index_low = _read_u16(handle)
-        index_high = _read_u16(handle)
-        misc1 = _read_u32(handle)
-        index_idx = _read_u32(handle)
-        misc2 = [_read_u32(handle) for _ in range(3)]
-        section_idx = _read_u32(handle)
-        misc3 = _read_u32(handle)
-        offset = _read_u64(handle)
-        block_and_section = _read_u64(handle)
+    raw = _read_exact(handle, required_bytes)
+    for values in record_struct.iter_unpack(raw):
+        (
+            index_low,
+            index_high,
+            misc1,
+            index_idx,
+            misc2_0,
+            misc2_1,
+            misc2_2,
+            section_idx,
+            misc3,
+            offset,
+            block_and_section,
+            data_len,
+        ) = values
         block_len = block_and_section & 0xFFFFFFFF
         section_len = (block_and_section >> 32) & 0xFFFFFFFF
-        data_len = _read_u32(handle)
         entries.append(
             {
                 "index": (index_low, index_high),
                 "misc1": misc1,
                 "indexIdx": index_idx,
-                "misc2": misc2,
+                "misc2": [misc2_0, misc2_1, misc2_2],
                 "sectionIdx": section_idx,
                 "misc3": misc3,
                 "offset": offset,
@@ -255,17 +283,38 @@ def _read_qi_index2(handle: BinaryIO, qi_index: dict[str, object]) -> list[dict[
 
 
 def _read_main_index(handle: BinaryIO, index_idx: int, nr_entries: int) -> list[MainIndexEntry]:
+    record_struct = struct.Struct("<QQQ")
+    if nr_entries < 0:
+        raise ValueError(f"MainIndex record count cannot be negative: {nr_entries}")
+    stream_size = _stream_size(handle)
     entries: list[MainIndexEntry] = []
     next_pointer = index_idx
     read_entries = 0
+    seen_pointers: set[int] = set()
     while read_entries < nr_entries:
+        if next_pointer in seen_pointers:
+            raise ValueError(f"MainIndex contains a repeated block pointer: {next_pointer}")
+        seen_pointers.add(next_pointer)
+        if next_pointer < 0 or next_pointer > stream_size - _UINT64.size:
+            raise ValueError(f"MainIndex block pointer is outside the stream: {next_pointer}")
         handle.seek(next_pointer, 0)
         nr_idx = _read_u64(handle)
-        chunk = [_read_u64(handle) for _ in range(3 * nr_idx)]
-        for i in range(int(nr_idx)):
-            section_idx = chunk[3 * i]
-            offset = chunk[3 * i + 1]
-            block_l_raw = chunk[3 * i + 2]
+        if nr_idx == 0:
+            raise ValueError("MainIndex block declares zero records before the index is complete")
+        remaining = nr_entries - read_entries
+        if nr_idx > remaining:
+            raise ValueError(
+                f"MainIndex block declares {nr_idx} records with only {remaining} expected"
+            )
+        required_block_bytes = int(nr_idx) * record_struct.size + _UINT64.size
+        available_block_bytes = max(0, stream_size - handle.tell())
+        if required_block_bytes > available_block_bytes:
+            raise EOFError(
+                f"Unexpected end of file: MainIndex block with {nr_idx} records "
+                "cannot fit within the remaining stream"
+            )
+        raw = _read_exact(handle, int(nr_idx) * record_struct.size)
+        for section_idx, offset, block_l_raw in record_struct.iter_unpack(raw):
             block_len = block_l_raw & 0xFFFFFFFF
             section_len = (block_l_raw >> 32) & 0xFFFFFFFF
             entries.append(
@@ -278,6 +327,8 @@ def _read_main_index(handle: BinaryIO, index_idx: int, nr_entries: int) -> list[
             )
         next_pointer = _read_u64(handle)
         read_entries += int(nr_idx)
+        if read_entries < nr_entries and next_pointer == 0:
+            raise ValueError("MainIndex chain ended before the declared record count")
     return entries
 
 
@@ -965,11 +1016,16 @@ def _parse_unknown_montage_catalog_rows(chunk: bytes) -> list[dict[str, object]]
     if not chunk:
         return rows
 
-    tokens = [
-        text.strip()
-        for text in chunk.decode("utf-16le", errors="ignore").split("\x00")
-        if text and text.strip()
-    ]
+    tokens = []
+    for text in chunk.decode("utf-16le", errors="ignore").split("\x00"):
+        if not text:
+            continue
+        stripped = text.strip()
+        if not stripped:
+            continue
+        cleaned = " ".join(stripped.split())
+        if cleaned:
+            tokens.append(cleaned)
     if not tokens:
         return rows
     # Extremely large token streams are typically noisy payloads rather than
@@ -977,53 +1033,38 @@ def _parse_unknown_montage_catalog_rows(chunk: bytes) -> list[dict[str, object]]
     if len(tokens) > UNKNOWN_MONTAGE_MAX_TOKENS:
         return rows
 
-    def _collapse_spaces(text: str) -> str:
-        return " ".join(text.split())
-
+    unique_tokens = set(tokens)
     title_cache: dict[str, str | None] = {}
-
-    def _extract_catalog_title(token: str) -> str | None:
-        cached = title_cache.get(token)
-        if token in title_cache:
-            return cached
-        cleaned = _collapse_spaces(token)
-        match = re.search(r"(\d{1,3}\s+KANALER)\b", cleaned.upper())
-        if not match:
-            # Some hidden catalogs use custom all-caps names
-            # with binary garbage prefixed inside the same UTF-16 token.
-            name_candidates = re.findall(r"[A-Za-z][A-Za-z0-9 _-]{2,31}", cleaned)
-            if not name_candidates:
-                return None
-            candidate = " ".join(name_candidates[-1].upper().split())
-            # Reject obvious channel labels so we don't start parsing in the
-            # middle of a channel-name sequence (e.g. VTP1, F3).
-            if re.fullmatch(r"[A-Z]{1,4}\d{0,3}[A-Z]?", candidate) and (
-                any(ch.isdigit() for ch in candidate) or len(candidate) <= 4
-            ):
-                title_cache[token] = None
-                return None
-            title_cache[token] = candidate
-            return candidate
-        count = int(match.group(1).split()[0])
-        result = f"{count} kanaler"
-        title_cache[token] = result
-        return result
+    is_digit_cache: dict[str, bool] = {}
+    for token in unique_tokens:
+        is_digit_cache[token] = token.isdigit()
+        match = _UNKNOWN_MONTAGE_TITLE_RE.search(token.upper())
+        if match:
+            count = int(match.group(1).split()[0])
+            title_cache[token] = f"{count} kanaler"
+            continue
+        # Some hidden catalogs use custom all-caps names
+        # with binary garbage prefixed inside the same UTF-16 token.
+        name_candidates = _UNKNOWN_MONTAGE_NAME_RE.findall(token)
+        if not name_candidates:
+            title_cache[token] = None
+            continue
+        candidate = " ".join(name_candidates[-1].upper().split())
+        # Reject obvious channel labels so we don't start parsing in the
+        # middle of a channel-name sequence (e.g. VTP1, F3).
+        if _UNKNOWN_MONTAGE_OBVIOUS_LABEL_RE.fullmatch(candidate) and (
+            any(ch.isdigit() for ch in candidate) or len(candidate) <= 4
+        ):
+            title_cache[token] = None
+            continue
+        title_cache[token] = candidate
 
     channel_name_cache: dict[str, bool] = {}
-
-    def _is_catalog_channel_name(token: str) -> bool:
-        if token in channel_name_cache:
-            return channel_name_cache[token]
-        cleaned = _collapse_spaces(token)
-        if not cleaned or cleaned.isdigit() or _extract_catalog_title(cleaned):
+    for token in unique_tokens:
+        if not token or is_digit_cache[token] or title_cache[token] or len(token) > 24:
             channel_name_cache[token] = False
-            return False
-        if len(cleaned) > 24:
-            channel_name_cache[token] = False
-            return False
-        result = bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9+\-_/ ]{0,23}", cleaned))
-        channel_name_cache[token] = result
-        return result
+            continue
+        channel_name_cache[token] = bool(_UNKNOWN_MONTAGE_CHANNEL_RE.fullmatch(token))
 
     dedup: set[tuple[str, str]] = set()
     # Repeated noisy title hits can appear in the same blob (e.g. custom local
@@ -1051,31 +1092,31 @@ def _parse_unknown_montage_catalog_rows(chunk: bytes) -> list[dict[str, object]]
 
     i = 0
     while i < len(tokens):
-        montage_name = _extract_catalog_title(tokens[i])
+        montage_name = title_cache[tokens[i]]
         if not montage_name:
             i += 1
             continue
 
-        expected_match = re.match(r"(\d+)", montage_name)
+        expected_match = _UNKNOWN_MONTAGE_LEADING_INT_RE.match(montage_name)
         expected_count = int(expected_match.group(1)) if expected_match else 0
         pairs: list[tuple[str, str]] = []
         seen_signal_ids: set[str] = set()
         j = i + 1
         misses = 0
         while j < len(tokens):
-            if _extract_catalog_title(tokens[j]) and pairs:
+            if title_cache[tokens[j]] and pairs:
                 break
             if j + 1 < len(tokens):
-                left = _collapse_spaces(tokens[j])
-                right = _collapse_spaces(tokens[j + 1])
-                if _is_catalog_channel_name(left) and right.isdigit():
+                left = tokens[j]
+                right = tokens[j + 1]
+                if channel_name_cache[left] and is_digit_cache[right]:
                     if right not in seen_signal_ids:
                         seen_signal_ids.add(right)
                         pairs.append((left, right))
                     j += 2
                     misses = 0
                     continue
-                if left.isdigit() and _is_catalog_channel_name(right):
+                if is_digit_cache[left] and channel_name_cache[right]:
                     if left not in seen_signal_ids:
                         seen_signal_ids.add(left)
                         pairs.append((right, left))
@@ -2125,7 +2166,7 @@ def _read_hypnogram(
 # ---------------------------------------------------------------------------
 
 
-def read_nervus_header(path: str | Path):
+def read_nervus_header(path: str | Path, *, include_qi_index2: bool = True):
     filename = Path(path)
     if filename.suffix.lower() == ".eeg":
         from .legacy_eeg import read_legacy_header as read_legacy_eeg_header
@@ -2225,7 +2266,7 @@ def read_nervus_header(path: str | Path):
 
         static_packets = _read_static_packets(handle)
         qi_index = _read_qi_index(handle, len(static_packets))
-        qi_index2 = _read_qi_index2(handle, qi_index)
+        qi_index2 = _read_qi_index2(handle, qi_index) if include_qi_index2 else []
         main_index = _read_main_index(handle, index_idx, int(qi_index["nrEntries"]))
         info_guids = _read_info_guids(handle, static_packets, main_index)
         dynamic_packets = _read_dynamic_packets(handle, static_packets, main_index)

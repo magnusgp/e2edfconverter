@@ -102,7 +102,7 @@ def test_convert_to_edf(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         )
     ]
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -185,7 +185,7 @@ def test_resample_and_sidecar(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         )
     ]
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -272,7 +272,7 @@ def test_prune_channel_label_is_suppressed_in_outputs(
         )
     ]
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 100.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -357,7 +357,7 @@ def test_montage_mapping_recovers_numeric_channel_labels(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -424,7 +424,7 @@ def test_montage_mapping_skipped_for_non_numeric_labels(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -471,7 +471,7 @@ def test_montage_mapping_recovers_from_signalname2_endpoint(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -521,7 +521,7 @@ def test_montage_mapping_recovers_when_most_channels_are_numeric(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -569,7 +569,7 @@ def test_montage_mapping_handles_parenthetical_alias_in_derivation(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -618,7 +618,7 @@ def test_montage_mapping_recovers_non_eeg_single_derivation_label(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -666,7 +666,7 @@ def test_montage_mapping_aux_rows_fill_missing_without_overriding_primary(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -716,7 +716,7 @@ def test_montage_mapping_recovers_from_derivation_fixed_table_source(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -765,7 +765,7 @@ def test_montage_mapping_recovers_from_derivation_main_table_direct_rows(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -818,7 +818,7 @@ def test_montage_mapping_unknown_catalog_fills_numeric_ref_rows(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -875,7 +875,7 @@ def test_montage_mapping_prefers_best_unknown_catalog_group(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -932,7 +932,7 @@ def test_montage_mapping_interleaved_aux_rows_keep_catalog_conflicts_local(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -983,7 +983,7 @@ def test_montage_mapping_ignores_bipolar_unknown_catalog_direct_labels(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -1027,7 +1027,7 @@ def test_directory_input_preserves_subfolders_and_avoids_collisions(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -1082,7 +1082,7 @@ def test_multi_input_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -1122,7 +1122,7 @@ def test_ui_single_file_without_real_rich(monkeypatch: pytest.MonkeyPatch, tmp_p
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.0}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):
@@ -1198,7 +1198,7 @@ def test_convert_rejects_fractional_source_rate_without_resampling(
     fake_header.startDateTime = datetime(2021, 5, 5, 8, 30, 0)
     fake_header.Events = []
 
-    def _fake_read_header(path: Path):
+    def _fake_read_header(path: Path, **_kwargs):
         return {"Fs": 128.5}, fake_header
 
     def _fake_read_data(path: Path, header: NervusHeader, channels=None, begsample=None, endsample=None):

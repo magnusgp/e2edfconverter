@@ -238,7 +238,7 @@ class TestEdfPlusCompliance:
             )
         ]
 
-        def _fake_read_header(path: Path):
+        def _fake_read_header(path: Path, **_kwargs):
             return {"Fs": 256.0}, fake_header
 
         def _fake_read_data(path: Path, header: NervusHeader, channels=None, **kwargs):

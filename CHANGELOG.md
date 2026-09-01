@@ -4,6 +4,27 @@
 
 -
 
+## 0.4.2 (2026-08-29)
+
+- Fix README image URLs so the logo and terminal screenshot render on PyPI.
+
+## 0.4.1 (2026-08-17)
+
+- Improve GitHub and PyPI discoverability for Natus/Nicolet/Nervus, EEG and EDF+ searches.
+- Refresh the README introduction and acknowledgements without changing converter behaviour.
+
+## 0.4.0 (2026-08-03)
+
+- Faster conversion: bulk index decoding, vectorised EDF record writing, and skipping the unused QIIndex2 table during conversion. Output bytes are unchanged.
+- Optional coalesced waveform reads, off by default: merges adjacent disk reads into bigger ones (capped at 8 MiB). Enable with `NICOLET_E2EDF_COALESCE_READS=1` or `read_nervus_data(..., coalesce_reads=True)`.
+- Fix index parsing to check declared record counts against the actual file size instead of trusting them blindly. Truncated or corrupt files now fail early with a clear error instead of hanging.
+- Add tests for the new reader and the parser/writer edge cases.
+
+## 0.3.0 (2026-03-27)
+
+- Speed up hidden `UNKNOWN` montage-catalog parsing by normalizing and classifying UTF-16 tokens once per blob
+- Add local profiling and regression-equivalence helper scripts under `tools/` for stage timing and exact baseline-vs-current comparisons.
+
 ## 0.2.9 (2026-03-03)
 
 - Fix duplicate channel-label collisions in legacy `.eeg` recordings by disambiguating repeated labels with references when available (e.g. `Fp1-Ref`, `Fp1-AV`).
